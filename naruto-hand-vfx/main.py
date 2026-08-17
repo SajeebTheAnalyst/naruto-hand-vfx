@@ -8,14 +8,14 @@ from vfx.rasengan import RasenganEffect
 
 
 class NarutoHandVFXApp:
-    """Phase 2 webcam app with a procedural Rasengan effect tied to the palm center."""
+    """Phase 3 webcam app with dynamic Rasengan formation animation tied to the palm center."""
 
     def __init__(self, camera_index: int = 0, frame_width: int = 640, frame_height: int = 480):
         self.tracker = HandTracker(camera_index=camera_index, frame_width=frame_width, frame_height=frame_height)
-        self.effect = RasenganEffect(base_radius=62, smoothing=0.18)
+        self.effect = RasenganEffect(base_radius=62, smoothing=0.18, formation_duration=2.5)
 
     def run(self) -> None:
-        """Main webcam loop for Phase 2."""
+        """Main webcam loop for Phase 3."""
         prev_time = time.perf_counter()
 
         try:
@@ -71,7 +71,7 @@ class NarutoHandVFXApp:
                     2,
                 )
 
-                cv2.imshow("Naruto Hand VFX Studio - Phase 2", frame)
+                cv2.imshow("Naruto Hand VFX Studio - Phase 3", frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), ord("Q")):
                     break
