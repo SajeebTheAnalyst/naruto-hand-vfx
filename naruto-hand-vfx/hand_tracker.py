@@ -49,7 +49,7 @@ class HandTracker:
         options = HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
             running_mode=RunningMode.VIDEO,
-            num_hands=1,
+            num_hands=2,
             min_hand_detection_confidence=0.5,
             min_hand_presence_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -58,6 +58,7 @@ class HandTracker:
 
         self.last_landmarks = None
         self.last_palm_center = None
+        self.last_hands = []
 
     def calculate_palm_center(self, landmarks, frame_width: int, frame_height: int):
         """Estimate the hand palm center from a stable subset of landmarks."""
@@ -72,7 +73,7 @@ class HandTracker:
         return int(center[0]), int(center[1])
 
     def process_frame(self, frame):
-        """Process a single camera frame and return palm center + landmark points."""
+        """Process a single camera frame and return up to two palm centers + landmark sets."""
         height, width = frame.shape[:2]
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = Image(image_format=ImageFormat.SRGB, data=rgb)
@@ -82,13 +83,26 @@ class HandTracker:
         if not results.hand_landmarks:
             self.last_landmarks = None
             self.last_palm_center = None
-            return None, None
+            self.last_hands = []
+            return None, None, []
 
-        hand = results.hand_landmarks[0]
-        landmarks = [(int(landmark.x * width), int(landmark.y * height)) for landmark in hand]
-        self.last_landmarks = landmarks
-        self.last_palm_center = self.calculate_palm_center(landmarks, width, height)
-        return self.last_palm_center, landmarks
+        hands = []
+        for hand_landmarks in results.hand_landmarks:
+            landmarks = [(int(landmark.x * width), int(landmark.y * height)) for landmark in hand_landmarks]
+            palm_center = self.calculate_palm_center(landmarks, width, height)
+            hands.append({
+                "landmarks": landmarks,
+                "palm_center": palm_center,
+            })
+
+        self.last_hands = hands
+        self.last_landmarks = hands[0]["landmarks"] if hands else None
+        self.last_palm_center = hands[0]["palm_center"] if hands else None
+
+        if len(hands) == 1:
+            return hands[0]["palm_center"], hands[0]["landmarks"], hands
+
+        return hands[0]["palm_center"], hands[0]["landmarks"], hands
 
     def draw_landmarks(self, frame, landmarks):
         """Overlay the detected hand skeleton on the current frame."""

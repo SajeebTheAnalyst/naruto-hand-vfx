@@ -540,9 +540,155 @@ Only a gesture transition such as `POINTING -> TWO_FINGERS` or `OPEN_PALM -> TWO
 - The flame shell and particles are intentionally irregular to avoid feeling mechanical
 - The effect is designed to coexist within the same single-active-effect state machine as Rasengan and Chidori
 
+## Phase 7: Two-Hand Energy Beam VFX
+
+Phase 7 adds a procedural energy beam that connects the palm of one hand to the palm of a second detected hand. The beam is generated procedurally using OpenCV and NumPy, with a bright core, layered glow, animated streams, and particles traveling along the connecting axis.
+
+### What Phase 7 adds
+
+- **Two-hand tracking**: Up to two hands are now tracked at the same time using MediaPipe's multi-hand landmarker configuration
+- **Stable palm centers**: Each recognized hand produces a palm-center position that is smoothed for fluid motion
+- **Energy Beam geometry**: The beam start point is Hand 1's palm center and the end is Hand 2's palm center
+- **Beam layers**: The beam contains a bright central core, cyan energy layers, glow halos, and animated outer rims
+- **Energy streams**: Animated curving strands flow along the beam axis and remain visually attached to the beam
+- **Particle flow**: Lightweight particles travel along the beam with directional motion and natural recycling
+- **Formation animation**: The beam grows from a small connection into a fully formed energy blast with easing-driven intensity
+- **Gesture activation**: `TWO_FINGERS + TWO_FINGERS` triggers the beam; a single `TWO_FINGERS` hand still activates Fireball
+
+### Two-hand tracking changes
+
+The tracker was updated to request `num_hands=2` while preserving the single-hand API used by the rest of the app.
+
+The result is a structure like this:
+
+```python
+hands = [
+    {"palm_center": (x1, y1), "landmarks": [...], "gesture": GestureType.TWO_FINGERS},
+    {"palm_center": (x2, y2), "landmarks": [...], "gesture": GestureType.TWO_FINGERS},
+]
+```
+
+This allows the app to:
+
+- track both hands at once
+- keep Hand 1 and Hand 2 ordering stable during normal motion
+- render the beam between the two palm centers
+- gracefully deactivate if one hand disappears or the gesture no longer matches
+
+### Beam geometry
+
+The beam is built from the vector between the two palms:
+
+- `start point = Hand 1 palm center`
+- `end point = Hand 2 palm center`
+- `beam length = distance(start, end)`
+- `beam width = clamped function of hand distance and formation progress`
+
+The width is normalized so the beam stays visually strong without becoming oversized. When hands are close together, the beam narrows; when they are farther apart, the beam widens slightly.
+
+### Energy Beam visual architecture
+
+The beam effect is implemented in `vfx/energy_beam.py` and is kept separate from the main app loop.
+
+Key components:
+
+- `EnergyBeamEffect.__init__()`: stores beam size, timing, and deterministic particle layout
+- `update()`: advances the formation charge and smooths the end-point movement
+- `_draw_core()`: renders the bright luminous center of the beam
+- `_draw_outer_layers()`: adds cyan and blue energy shells around the main beam
+- `_draw_energy_streams()`: draws flowing animated strands along the beam axis
+- `_draw_particles()`: animates particles moving from one hand to the other
+- `_draw_fragments()`: adds small energy fragments around the beam to create a lively energetic feel
+- `render()`: composites all beam layers using additive blending onto the frame
+
+### Gesture mapping and effect transitions
+
+The current effect mapping is:
+
+```
+OPEN_PALM
+    ↓
+No effect
+
+FIST
+    ↓
+RASENGAN
+
+POINTING
+    ↓
+CHIDORI
+
+TWO_FINGERS + ONE HAND
+    ↓
+FIREBALL
+
+TWO_FINGERS + TWO HANDS
+    ↓
+ENERGY_BEAM
+```
+
+The two-hand state logic is intentionally strict:
+
+- both hands must show `TWO_FINGERS`
+- if one hand is missing, no beam is activated
+- if one hand changes gesture, the beam deactivates cleanly
+- a transition into `ENERGY_BEAM` resets the formation progress once
+- continuous beam activation does not restart the formation every frame
+
+### Formation animation behavior
+
+When both hands match the condition:
+
+```
+Hand 1 + Hand 2
+    ↓
+Small energy connection
+    ↓
+Beam starts forming
+    ↓
+Beam expands
+    ↓
+Energy intensity increases
+    ↓
+FULL ENERGY BEAM
+```
+
+The effect uses a `formation_progress` from `0.0` to `1.0` with smooth easing. Width, glow, particles, and beam intensity all ramp up during activation and remain alive after the beam is fully formed.
+
+### Performance
+
+The beam keeps the same performance constraints as the other VFX modules:
+
+- lightweight particle counts
+- deterministic animation to avoid per-frame random bursts
+- additive blending only on the final result
+- no expensive repeated allocations beyond the frame overlay and helper arrays
+
+### How to test Phase 7
+
+1. One hand + `FIST` → Rasengan should remain active
+2. One hand + `POINTING` → Chidori should remain active
+3. One hand + `TWO_FINGERS` → Fireball should remain active
+4. Two hands + both `TWO_FINGERS` → Energy Beam should activate
+5. Move Hand 1 → beam start should follow
+6. Move Hand 2 → beam end should follow
+7. Move both hands apart → beam length grows
+8. Move both hands together → beam shortens
+9. Keep both hands still → beam animation continues while holding its connection
+10. Remove one hand → beam deactivates safely
+11. Switch one hand away from `TWO_FINGERS` → beam deactivates
+12. Re-enter the two-hand gesture → formation begins again
+
+### Current limitations
+
+- This is still a procedural prototype and not a final VFX engine
+- The beam uses deterministic animation and geometric shaping rather than physics simulation
+- Hand ordering is stable under normal motion, but extreme rapid swaps may still cause minor visual jitter
+- The visual result is tuned for stylized anime energy effects rather than physically accurate beams
+
 ### Future Phases
 
 Potential enhancements for future phases:
-- **Phase 7**: Advanced gesture combinations and triggers
-- **Phase 8**: Hand distance-based scaling and energy intensity tuning
-- **Phase 9**: Sound effects and recording/export capabilities
+- **Phase 8**: More advanced multi-hand gesture combinations and triggers
+- **Phase 9**: Scene composition, hand distance scaling, and energy tuning
+- **Phase 10**: Audio and export tools
