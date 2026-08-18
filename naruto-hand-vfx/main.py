@@ -5,21 +5,79 @@ import cv2
 
 from hand_tracker import HandTracker
 from gesture_detector import GestureDetector, GestureType
+from vfx.chidori import ChidoriEffect
+from vfx.fireball import FireballEffect
 from vfx.rasengan import RasenganEffect
 
 
 class NarutoHandVFXApp:
-    """Phase 4 webcam app with gesture recognition controlling the Rasengan effect."""
+    """Phase 6 app with independent Rasengan, Chidori, and Fireball effect states."""
 
     def __init__(self, camera_index: int = 0, frame_width: int = 640, frame_height: int = 480):
         self.tracker = HandTracker(camera_index=camera_index, frame_width=frame_width, frame_height=frame_height)
-        self.effect = RasenganEffect(base_radius=62, smoothing=0.18, formation_duration=2.5)
+        self.rasengan = RasenganEffect(base_radius=62, smoothing=0.18, formation_duration=2.5)
+        self.chidori = ChidoriEffect(base_radius=52, smoothing=0.18, formation_duration=2.2)
+        self.fireball = FireballEffect(base_radius=56, smoothing=0.18, formation_duration=2.3)
         self.gesture_detector = GestureDetector(history_length=5)
+        self.active_effect = "NONE"
         self.previous_gesture = GestureType.UNKNOWN
-        self.rasengan_active = False
+
+    def _apply_effect_state(self, current_gesture, palm_center, timestamp):
+        """Switch between NONE, RASENGAN, CHIDORI, and FIREBALL based on stable gestures."""
+        if palm_center is None:
+            self.active_effect = "NONE"
+            self.rasengan.set_inactive()
+            self.chidori.set_inactive()
+            self.fireball.set_inactive()
+            return
+
+        if current_gesture == GestureType.OPEN_PALM:
+            self.active_effect = "NONE"
+            self.rasengan.set_inactive()
+            self.chidori.set_inactive()
+            self.fireball.set_inactive()
+            return
+
+        if current_gesture == GestureType.FIST:
+            if self.active_effect != "RASENGAN":
+                self.rasengan.set_inactive()
+                self.chidori.set_inactive()
+                self.fireball.set_inactive()
+                self.active_effect = "RASENGAN"
+            self.rasengan.update(palm_center, timestamp)
+            return
+
+        if current_gesture == GestureType.POINTING:
+            if self.active_effect != "CHIDORI":
+                self.rasengan.set_inactive()
+                self.chidori.set_inactive()
+                self.fireball.set_inactive()
+                self.active_effect = "CHIDORI"
+            self.chidori.update(palm_center, timestamp)
+            return
+
+        if current_gesture == GestureType.TWO_FINGERS:
+            if self.active_effect != "FIREBALL":
+                self.rasengan.set_inactive()
+                self.chidori.set_inactive()
+                self.fireball.set_inactive()
+                self.active_effect = "FIREBALL"
+            self.fireball.update(palm_center, timestamp)
+            return
+
+        if self.active_effect == "RASENGAN":
+            self.rasengan.update(palm_center, timestamp)
+        elif self.active_effect == "CHIDORI":
+            self.chidori.update(palm_center, timestamp)
+        elif self.active_effect == "FIREBALL":
+            self.fireball.update(palm_center, timestamp)
+        else:
+            self.rasengan.set_inactive()
+            self.chidori.set_inactive()
+            self.fireball.set_inactive()
 
     def run(self) -> None:
-        """Main webcam loop for Phase 4 with gesture-based Rasengan control."""
+        """Main webcam loop for Phase 5 with effect switching via gesture detection."""
         prev_time = time.perf_counter()
 
         try:
@@ -31,15 +89,12 @@ class NarutoHandVFXApp:
 
                 frame = cv2.flip(frame, 1)
                 palm_center, landmarks = self.tracker.process_frame(frame)
-
                 current_gesture = GestureType.UNKNOWN
 
                 if palm_center is not None and landmarks is not None:
-                    # Detect gesture from landmarks
                     current_gesture = self.gesture_detector.detect(landmarks)
                     self.tracker.draw_landmarks(frame, landmarks)
 
-                    # Draw palm center indicator
                     cv2.circle(frame, palm_center, 8, (0, 255, 255), -1)
                     cv2.putText(
                         frame,
@@ -51,29 +106,12 @@ class NarutoHandVFXApp:
                         1,
                     )
 
-                    # Gesture-based Rasengan control
-                    # FIST activates the Rasengan
-                    if current_gesture == GestureType.FIST:
-                        if not self.rasengan_active:
-                            # Transition from inactive to active: start formation
-                            self.rasengan_active = True
-                        # Update Rasengan position and continue animation
-                        self.effect.update(palm_center, time.perf_counter())
-                    # OPEN_PALM deactivates the Rasengan
-                    elif current_gesture == GestureType.OPEN_PALM:
-                        if self.rasengan_active:
-                            # Transition from active to inactive: deactivate effect
-                            self.rasengan_active = False
-                            self.effect.set_inactive()
-                    # For other gestures, keep the previous state
-                    else:
-                        if self.rasengan_active:
-                            self.effect.update(palm_center, time.perf_counter())
+                    timestamp = time.perf_counter()
+                    self._apply_effect_state(current_gesture, palm_center, timestamp)
                 else:
-                    # No hand detected: deactivate Rasengan
-                    current_gesture = GestureType.UNKNOWN
-                    self.rasengan_active = False
-                    self.effect.set_inactive()
+                    self.active_effect = "NONE"
+                    self.rasengan.set_inactive()
+                    self.chidori.set_inactive()
                     cv2.putText(
                         frame,
                         "No hand detected",
@@ -84,10 +122,13 @@ class NarutoHandVFXApp:
                         2,
                     )
 
-                # Render the Rasengan
-                frame = self.effect.render(frame)
+                if self.active_effect == "RASENGAN":
+                    frame = self.rasengan.render(frame)
+                elif self.active_effect == "CHIDORI":
+                    frame = self.chidori.render(frame)
+                elif self.active_effect == "FIREBALL":
+                    frame = self.fireball.render(frame)
 
-                # Display gesture information
                 gesture_text = f"Gesture: {current_gesture.value}"
                 gesture_color = (0, 255, 0) if current_gesture != GestureType.UNKNOWN else (0, 0, 255)
                 cv2.putText(
@@ -100,20 +141,18 @@ class NarutoHandVFXApp:
                     2,
                 )
 
-                # Display Rasengan state
-                rasengan_state = "Rasengan: ACTIVE" if self.rasengan_active else "Rasengan: INACTIVE"
-                rasengan_color = (0, 255, 0) if self.rasengan_active else (0, 0, 255)
+                effect_text = f"Effect: {self.active_effect}"
+                effect_color = (0, 255, 0) if self.active_effect != "NONE" else (0, 0, 255)
                 cv2.putText(
                     frame,
-                    rasengan_state,
+                    effect_text,
                     (10, 90),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
-                    rasengan_color,
+                    effect_color,
                     1,
                 )
 
-                # Calculate and display FPS
                 current_time = time.perf_counter()
                 dt = current_time - prev_time
                 fps = 1.0 / dt if dt > 0 else 0.0
@@ -129,7 +168,7 @@ class NarutoHandVFXApp:
                     1,
                 )
 
-                cv2.imshow("Naruto Hand VFX Studio - Phase 4", frame)
+                cv2.imshow("Naruto Hand VFX Studio - Phase 6", frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), ord("Q")):
                     break

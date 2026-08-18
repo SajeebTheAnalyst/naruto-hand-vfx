@@ -369,11 +369,180 @@ cd "c:\Python Project\naruto-hand-vfx"
 - The Rasengan uses a fixed size; future phases may scale based on hand distance.
 - This phase intentionally does not include Chidori, fireballs, beams, GUI, sound, or external assets.
 
-## Future Phases
+## Phase 5: Chidori Lightning VFX
+
+Phase 5 adds a separate procedural Chidori-style lightning effect that appears around the user's hand. The effect is generated procedurally using OpenCV and NumPy, and it is kept separate from the Rasengan effect so both can coexist cleanly in the same app.
+
+### What Phase 5 adds
+
+- **Electrical Core**: Pulsing blue/white energy core centered on the palm
+- **Lightning Branches**: Multiple irregular branches radiate outward from the hand
+- **Flicker Control**: Controlled electrical flicker adds motion without excessive flashing
+- **Multi-layer Glow**: Soft blue-cyan glow builds around the core and branches
+- **Electrical Particles**: Lighting particles orbit and drift around the core
+- **Formation Animation**: Chidori grows from spark to full lightning energy through easing-driven stages
+- **Gesture Mapping**: `POINTING` triggers Chidori while `FIST` keeps Rasengan active and `OPEN_PALM` disables everything
+
+### Chidori visual architecture
+
+The Chidori effect is implemented in `vfx/chidori.py` and is kept separate from the Rasengan logic.
+
+Key components:
+
+- `ChidoriEffect.__init__()`: stores effect sizing, timing, and deterministic branch/particle configuration
+- `update()`: advances formation and smooths the palm-following position
+- `_render_core()`: creates the bright electrical core and pulse
+- `_render_glow()`: adds layered glow to the core and branches
+- `_render_lightning_branches()`: draws irregular branching lightning paths
+- `_render_particles()`: emits orbiting electrical particles
+- `_render_flicker()`: adds subtle pulse/flicker around lightning structures
+- `render()`: composites all lightning layers onto the camera frame
+
+The Chidori is intentionally distinct from the Rasengan:
+
+- Rasengan = swirling spherical energy orb
+- Chidori = concentrated electrical lightning around the hand
+
+### Gesture mapping
+
+The current effect-selection behavior is:
+
+- `FIST` → Rasengan active
+- `POINTING` → Chidori active
+- `OPEN_PALM` → no active effect
+- `UNKNOWN` → keep the current effect state or safely clear it if no effect is active
+
+This is handled in `main.py` by selecting one active effect at a time, without mixing Chidori and Rasengan rendering on the same frame.
+
+### Effect state transitions
+
+The effect state machine is intentionally simple and stable:
+
+```
+OPEN_PALM
+    ↓
+No effect
+
+FIST
+    ↓
+Start Rasengan formation
+    ↓
+Active Rasengan
+
+POINTING
+    ↓
+Stop Rasengan
+    ↓
+Start Chidori formation
+    ↓
+Active Chidori
+
+OPEN_PALM
+    ↓
+Clear active effect
+```
+
+A continuous `POINTING` gesture does not restart the formation every frame. Only a transition such as `FIST -> POINTING` or `OPEN_PALM -> POINTING` triggers a fresh Chidori startup.
+
+### How to test Chidori
+
+1. Show an open palm → no effect should be active
+2. Form a fist → Rasengan should become active
+3. Switch from fist to pointing → Rasengan should deactivate and Chidori should begin forming
+4. Keep pointing → Chidori should remain active and continue its lightning loop
+5. Move the pointing hand → Chidori should follow smoothly
+6. Return to open palm → Chidori should disable
+7. Point again → Chidori should start a fresh formation
+
+### Performance notes
+
+- The Chidori effect uses deterministic branch angles and lightweight particle counts to stay real-time
+- Glow and branch rendering are limited to keep the frame rate stable
+- The effect avoids expensive repeated random generation by reusing deterministic animation data
+
+### Current limitations
+
+- Only one effect is active at a time (Rasengan or Chidori)
+- Effects are still gesture-driven rather than pose- or context-aware
+- Chidori is procedural and stylized rather than physically simulating lightning
+- This phase does not add Fireball, Energy Beam, or GUI controls
+
+## Phase 6: Fireball VFX
+
+Phase 6 adds a fiery offensive effect that forms around the palm with a hot core, expanding flame shell, ember particles, and burst sparks. This version is intentionally distinct from both Rasengan and Chidori: where Rasengan is a controlled sphere and Chidori is an electrical storm, Fireball is an aggressive, volumetric flame mass with heat and motion.
+
+### What Phase 6 adds
+
+- **Hot Core**: A bright yellow-white flame center that pulses and intensifies over the charge cycle
+- **Flame Shell**: Irregular orange-red perimeter that expands with layered, organic contouring
+- **Emission Particles**: Ember and spark particles orbit the flame boundary and spread outward
+- **Glow Spill**: Warm layered glow radiates from the core to suggest heat and pressure
+- **Formation Animation**: The fireball grows from a small ignited core into a larger, roaring flame
+- **Gesture Mapping**: `TWO_FINGERS` triggers Fireball while `FIST` remains Rasengan and `POINTING` remains Chidori
+- **Active Effect Management**: Only one VFX is rendered at a time, ensuring stable effect transitions and no overlap
+
+### Fireball visual architecture
+
+The Fireball effect is implemented in `vfx/fireball.py` and is structured to mirror the other procedural VFX classes.
+
+Key components:
+
+- `FireballEffect.__init__()`: initializes size, smoothing, formation duration, and particle layout
+- `update()`: advances charge progress and smooths palm-following motion
+- `_render_hot_core()`: builds the glowing inner energy nucleus
+- `_render_flame_shell()`: draws the irregular flame boundary with animated lobes
+- `_render_glow()`: adds warm orange/red layered glow rings
+- `_render_fire_particles()`: emits ember particles around the flame
+- `_render_sparks()`: adds outward-moving spark trails
+- `render()`: blends all layers onto the camera frame with alpha composition
+
+### Effect state transitions
+
+The stable effect flow for the full app becomes:
+
+```
+OPEN_PALM
+    ↓
+No effect
+
+FIST
+    ↓
+Rasengan active
+
+POINTING
+    ↓
+Chidori active
+
+TWO_FINGERS
+    ↓
+Fireball active
+
+OPEN_PALM
+    ↓
+Clear active effect
+```
+
+Only a gesture transition such as `POINTING -> TWO_FINGERS` or `OPEN_PALM -> TWO_FINGERS` triggers a fresh Fireball startup. Holding `TWO_FINGERS` keeps the effect active without restarting each frame.
+
+### How to test Fireball
+
+1. Show an open palm → no effect should be active
+2. Form a fist → Rasengan should activate
+3. Change to pointing → Chidori should activate
+4. Form a two-finger peace/victory pose → Fireball should begin forming
+5. Hold the two-finger pose → Fireball should remain active and animate smoothly
+6. Return to open palm → all effects should clear
+
+### Notes
+
+- The fireball grows from a small flame core rather than appearing at full size immediately
+- The effect remains procedural and uses deterministic animation values for stable output
+- The flame shell and particles are intentionally irregular to avoid feeling mechanical
+- The effect is designed to coexist within the same single-active-effect state machine as Rasengan and Chidori
+
+### Future Phases
 
 Potential enhancements for future phases:
-- **Phase 5**: Multiple VFX types (Chidori, Fireball, Energy Beam) with gesture selection
-- **Phase 6**: Advanced gesture combinations (two-finger swipe to throw, etc.)
-- **Phase 7**: Hand distance-based scaling
-- **Phase 8**: Sound effects and audio feedback
-- **Phase 9**: Recording/export capabilities
+- **Phase 7**: Advanced gesture combinations and triggers
+- **Phase 8**: Hand distance-based scaling and energy intensity tuning
+- **Phase 9**: Sound effects and recording/export capabilities
