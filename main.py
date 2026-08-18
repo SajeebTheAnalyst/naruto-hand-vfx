@@ -155,6 +155,8 @@ class NarutoHandVFXApp:
         if key in mapping:
             self.keyboard_effect_override = mapping[key]
             self.keyboard_effect_expires_at = time.perf_counter() + 0.12
+        elif key in (ord("h"), ord("H")):
+            self.config.show_status_panel = not self.config.show_status_panel
         elif key in (ord("q"), ord("Q")):
             self.keyboard_effect_override = "NONE"
             self.keyboard_effect_expires_at = time.perf_counter() + 0.12
@@ -241,7 +243,8 @@ class NarutoHandVFXApp:
                 fps = 1.0 / dt if dt > 0 else 0.0
                 prev_time = current_time
 
-                self._render_status_panel(frame, fps)
+                if self.config.show_status_panel:
+                    self._render_status_panel(frame, fps)
 
                 key = cv2.waitKey(1) & 0xFF
                 self._handle_keyboard(key)

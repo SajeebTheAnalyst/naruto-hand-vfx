@@ -18,6 +18,7 @@ class AppConfig:
     glow_strength: float = 1.0
     enable_keyboard_controls: bool = True
     debug_overlay: bool = False
+    show_status_panel: bool = True
 
     @classmethod
     def from_args(cls, argv=None) -> "AppConfig":
@@ -32,6 +33,7 @@ class AppConfig:
         parser.add_argument("--glow-strength", type=float, default=1.0, help="Glow strength multiplier")
         parser.add_argument("--no-keyboard", action="store_true", help="Disable keyboard fallback controls")
         parser.add_argument("--debug-overlay", action="store_true", help="Render extra debug frames")
+        parser.add_argument("--hide-overlay", action="store_true", help="Hide the status panel for clean recording")
         args = parser.parse_args(argv)
 
         return cls(
@@ -45,4 +47,5 @@ class AppConfig:
             glow_strength=max(0.5, args.glow_strength),
             enable_keyboard_controls=not args.no_keyboard,
             debug_overlay=args.debug_overlay,
+            show_status_panel=not args.hide_overlay,
         )

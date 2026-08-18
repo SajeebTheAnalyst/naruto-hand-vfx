@@ -121,7 +121,7 @@ class FireballEffect:
         if progress < 0.05:
             return
 
-        particle_count = int(self.particle_count * (0.25 + progress * 0.95))
+        particle_count = min(self.particle_count, int(self.particle_count * (0.25 + progress * 0.95)))
 
         for particle_index in range(particle_count):
             base_angle = self.particle_angles[particle_index]
